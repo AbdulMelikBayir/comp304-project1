@@ -336,12 +336,42 @@ int process_command(struct command_t *command) {
 
     // TODO: do your own exec with path resolving using execv()
     // do so by replacing the execvp call below
-    execvp(command->name, command->args); // exec+args+path
-    printf("-%s: %s: command not found\n", sysname, command->name);
+    //execvp(command->name, command->args); // exec+args+path
+    char *path_env = getenv("PATH");
+    char *path_copy = strdup(path_env);
+    char *token = strtok(path_copy, ":");
+    char full_path[1024];
+    bool found = false;
+
+    if (command->name[0] == '/' || (command->name[0] == '.' && command->name[1] == '/')) {
+	if (access(command->name, X_OK) == 0) {
+	    execv(command->name, command->args);
+	    found = true;
+	}
+    } else {
+	while (token != NULL) {
+	    snprintf(full_path, sizeof(full_path), "%s/%s", token, command->name);
+	    if (access(full_path, X_OK) == 0) {
+		found = free;
+		execv(full_path, command->args);
+		break;
+	    }
+	    token = strtok(NULL, ":");
+	}
+    }
+    free(path_copy);
+
+    if (!found) {
+	printf("-%s: %s: command not found\n", sysname, command->name);
+    }
     exit(127);
   } else {
     // TODO: implement background processes here
-    wait(0); // wait for child process to finish
+    if (command->background) {
+	printf("[Process running in background, PID: %d]\n", pid);
+    } else {
+	waitpid(pid, NULL, 0); // wait for child process to finish
+    }
     return SUCCESS;
   }
 }
