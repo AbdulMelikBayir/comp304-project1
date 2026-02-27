@@ -1,0 +1,5 @@
+liste.txt
+README.md
+shell-ish
+shellish-skeleton.c
+Fri Feb 27 03:11:58 PM UTC 2026

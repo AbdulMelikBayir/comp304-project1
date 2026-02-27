@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <termios.h> // termios, TCSANOW, ECHO, ICANON
 #include <unistd.h>
+#include <fcntl.h>
 const char *sysname = "shellish";
 
 enum return_codes {
@@ -337,6 +338,61 @@ int process_command(struct command_t *command) {
     // TODO: do your own exec with path resolving using execv()
     // do so by replacing the execvp call below
     //execvp(command->name, command->args); // exec+args+path
+
+    if (command->redirects[0]) {
+	char *file = command->redirects[0];
+        while (*file == ' ') file++;
+
+	int len = strlen(file);
+        while (len > 0 && (file[len - 1] == ' ' || file[len - 1] == '\t' || file[len - 1] == '\n' || file[len - 1] == '\r')) {
+	    file[--len] = '\0';
+        }
+
+	int fd_in = open(file, O_RDONLY);
+	if (fd_in < 0) {
+	    perror("Input redirection error");
+	    exit(1);
+	}
+	dup2(fd_in, STDIN_FILENO);
+	close(fd_in);
+    }
+
+    if (command->redirects[1]) {
+	char *file = command->redirects[1];
+        while (*file == ' ') file++;
+
+        int len = strlen(file);
+        while (len > 0 && (file[len - 1] == ' ' || file[len - 1] == '\t' || file[len - 1] == '\n' || file[len - 1] == '\r')) {
+            file[--len] = '\0';
+        }
+
+	int fd_out = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd_out < 0) {
+	    perror("Output redirection error");
+	    exit(1);
+	}
+	dup2(fd_out, STDOUT_FILENO);
+	close(fd_out);
+    }
+
+    if (command->redirects[2]) {
+	char *file = command->redirects[2];
+        while (*file == ' ') file++;
+
+	int len = strlen(file);
+        while (len > 0 && (file[len - 1] == ' ' || file[len - 1] == '\t' || file[len - 1] == '\n' || file[len - 1] == '\r')) {
+            file[--len] = '\0';
+        }
+
+	int fd_append = open(file, O_WRONLY | O_CREAT | O_APPEND, 0644);
+	if (fd_append < 0) {
+	    perror("Append redirection error");
+	    exit(1);
+	}
+	dup2(fd_append, STDOUT_FILENO);
+	close(fd_append);
+    }
+
     char *path_env = getenv("PATH");
     char *path_copy = strdup(path_env);
     char *token = strtok(path_copy, ":");
@@ -352,7 +408,7 @@ int process_command(struct command_t *command) {
 	while (token != NULL) {
 	    snprintf(full_path, sizeof(full_path), "%s/%s", token, command->name);
 	    if (access(full_path, X_OK) == 0) {
-		found = free;
+		found = true;
 		execv(full_path, command->args);
 		break;
 	    }
