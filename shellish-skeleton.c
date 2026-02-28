@@ -7,6 +7,9 @@
 #include <termios.h> // termios, TCSANOW, ECHO, ICANON
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <signal.h>
 const char *sysname = "shellish";
 
 enum return_codes {
@@ -386,6 +389,85 @@ if (strcmp(command->name, "cut") == 0) {
         free(temp_line);
     }
     return SUCCESS;
+  }
+
+if (strcmp(command->name, "chatroom") == 0) {
+      if (command->arg_count < 3) {
+          printf("Kullanım: chatroom <oda_adı> <kullanıcı_adı>\n");
+          return SUCCESS;
+      }
+
+      char *room_name = command->args[1];
+      char *user_name = command->args[2];
+      char room_dir[256];
+      char my_fifo[512];
+
+      snprintf(room_dir, sizeof(room_dir), "/tmp/chatroom-%s", room_name);
+      mkdir(room_dir, 0777);
+      snprintf(my_fifo, sizeof(my_fifo), "%s/%s", room_dir, user_name);
+      mkfifo(my_fifo, 0666);
+
+      printf("[Chatroom '%s' odasına '%s' olarak katıldınız. Çıkmak için '\\q' yazın.]\n", room_name, user_name);
+
+      pid_t chat_pid = fork();
+
+      if (chat_pid == 0) {
+          int fd_read = open(my_fifo, O_RDWR);
+          if (fd_read < 0) exit(1);
+
+          char msg_buffer[1024];
+          while (1) {
+              int bytes_read = read(fd_read, msg_buffer, sizeof(msg_buffer) - 1);
+              if (bytes_read > 0) {
+                  msg_buffer[bytes_read] = '\0';
+                  printf("\r%s\n", msg_buffer);
+                  printf("shellish$ ");
+                  fflush(stdout);
+              }
+          }
+      } else {
+          char input[1024];
+          char send_buffer[2048];
+          DIR *d;
+          struct dirent *dir;
+
+          while (1) {
+              if (fgets(input, sizeof(input), stdin) == NULL) break;
+              input[strcspn(input, "\n")] = 0;
+
+              if (strcmp(input, "\\q") == 0) {
+                  break;
+              }
+              if (strlen(input) == 0) continue;
+
+              snprintf(send_buffer, sizeof(send_buffer), "[%s]: %s", user_name, input);
+
+              d = opendir(room_dir);
+              if (d) {
+                  while ((dir = readdir(d)) != NULL) {
+                      if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0 || strcmp(dir->d_name, user_name) == 0) {
+                          continue;
+                      }
+
+                      char other_fifo[512];
+                      snprintf(other_fifo, sizeof(other_fifo), "%s/%s", room_dir, dir->d_name);
+
+                      int fd_write = open(other_fifo, O_WRONLY | O_NONBLOCK);
+                      if (fd_write >= 0) {
+                          write(fd_write, send_buffer, strlen(send_buffer));
+                          close(fd_write);
+                      }
+                  }
+                  closedir(d);
+              }
+          }
+
+          printf("[Odadan ayrıldınız.]\n");
+          kill(chat_pid, SIGTERM);
+          waitpid(chat_pid, NULL, 0);
+          unlink(my_fifo);
+      }
+      return SUCCESS;
   }
 
   if (command->next != NULL) {
