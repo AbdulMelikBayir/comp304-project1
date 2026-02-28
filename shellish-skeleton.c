@@ -324,6 +324,108 @@ int process_command(struct command_t *command) {
     }
   }
 
+if (strcmp(command->name, "cut") == 0) {
+    char delimiter = '\t';
+    char *fields_str = NULL;
+
+    for (int i = 1; i < command->arg_count; i++) {
+        if (command->args[i] == NULL) continue;
+
+        if (strncmp(command->args[i], "-d", 2) == 0) {
+            if (strlen(command->args[i]) > 2) {
+                delimiter = command->args[i][2];
+            } else if (i + 1 < command->arg_count && command->args[i+1] != NULL) {
+                delimiter = command->args[++i][0];
+            }
+        } else if (strncmp(command->args[i], "-f", 2) == 0) {
+            if (strlen(command->args[i]) > 2) {
+                fields_str = command->args[i] + 2;
+            } else if (i + 1 < command->arg_count && command->args[i+1] != NULL) {
+                fields_str = command->args[++i];
+            }
+        }
+    }
+
+    char line[1024];
+    while (fgets(line, sizeof(line), stdin)) {
+        line[strcspn(line, "\n")] = 0;
+ 
+        char *tokens[256];
+        int token_count = 0;
+        char *temp_line = strdup(line);
+        if (temp_line == NULL) continue;
+
+        char delim_str[2] = {delimiter, '\0'};
+        char *token = strtok(temp_line, delim_str);
+
+        while (token != NULL && token_count < 256) {
+            tokens[token_count++] = token;
+            token = strtok(NULL, delim_str);
+        }
+
+        if (fields_str != NULL && token_count > 0) {
+            char *f_copy = strdup(fields_str);
+            if (f_copy) {
+                char *f_token = strtok(f_copy, ",");
+                int first = 1;
+
+                while (f_token != NULL) {
+                    int field_idx = atoi(f_token) - 1;
+                    if (field_idx >= 0 && field_idx < token_count) {
+                        if (!first) printf("%c", delimiter);
+                        printf("%s", tokens[field_idx]);
+                        first = 0;
+                    }
+                    f_token = strtok(NULL, ",");
+                }
+                printf("\n");
+                free(f_copy);
+            }
+        }
+        fflush(stdout);
+        free(temp_line);
+    }
+    return SUCCESS;
+  }
+
+  if (command->next != NULL) {
+     int fd[2];
+     if (pipe(fd) == -1) {
+	perror("Pipe creation failed");
+	return EXIT;
+     }
+
+     pid_t pid_left = fork();
+     if (pid_left == 0) {
+	dup2(fd[1], STDOUT_FILENO);
+	close(fd[0]);
+	close(fd[1]);
+
+	command->next = NULL;
+	process_command(command);
+	exit(0);
+     }
+
+     pid_t pid_right = fork();
+     if (pid_right == 0) {
+	dup2(fd[0], STDIN_FILENO);
+	close(fd[1]);
+	close(fd[0]);
+
+	process_command(command->next);
+	exit(0);
+     }
+
+     close(fd[0]);
+     close(fd[1]);
+
+     if (!command->background) {
+	waitpid(pid_left, NULL, 0);
+	waitpid(pid_right, NULL, 0);
+     }
+     return SUCCESS;
+}
+
   pid_t pid = fork();
   if (pid == 0) // child
   {
