@@ -35,8 +35,5 @@ This project is a custom Linux shell called `shell-ish` implemented in C. It sup
 ### 5. Background Processes
 - Supports running commands in the background using the `&` symbol at the end of a command.
 
-## How to Compile and Run
-1. Open your terminal in the project directory.
-2. Compile the source code:
-   ```bash
-   gcc -o shell-ish shellish-skeleton.c
+## Repo Link: 
+(https://github.com/AbdulMelikBayir/comp304-project1.git)
