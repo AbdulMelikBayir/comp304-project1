@@ -393,7 +393,7 @@ if (strcmp(command->name, "cut") == 0) {
 
 if (strcmp(command->name, "chatroom") == 0) {
       if (command->arg_count < 3) {
-          printf("Kullanım: chatroom <oda_adı> <kullanıcı_adı>\n");
+          printf("Usage: chatroom <room_name> <user_name>\n");
           return SUCCESS;
       }
 
@@ -407,7 +407,7 @@ if (strcmp(command->name, "chatroom") == 0) {
       snprintf(my_fifo, sizeof(my_fifo), "%s/%s", room_dir, user_name);
       mkfifo(my_fifo, 0666);
 
-      printf("[Chatroom '%s' odasına '%s' olarak katıldınız. Çıkmak için '\\q' yazın.]\n", room_name, user_name);
+      printf("[Joined chatroom '%s' as '%s'. Type '\\q' to exit.]\n", room_name, user_name);
 
       pid_t chat_pid = fork();
 
@@ -462,13 +462,47 @@ if (strcmp(command->name, "chatroom") == 0) {
               }
           }
 
-          printf("[Odadan ayrıldınız.]\n");
+          printf("[You left the room.]\n");
           kill(chat_pid, SIGTERM);
           waitpid(chat_pid, NULL, 0);
           unlink(my_fifo);
       }
       return SUCCESS;
   }
+
+  if (strcmp(command->name, "count_items") == 0) {
+    DIR *d;
+    struct dirent *dir;
+    int files = 0, dirs = 0, hidden = 0;
+
+    d = opendir(".");
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if (dir->d_name[0] == '.') {
+                hidden++;
+            }
+
+            if (dir->d_type == DT_DIR) {
+                dirs++;
+            } else if (dir->d_type == DT_REG) {
+                files++;
+            }
+        }
+        closedir(d);
+
+	printf("--- Directory Summary (%s) ---\n", getenv("PWD"));
+	printf("Regular Files:    %d\n", files);
+	printf("Directories:      %d\n", dirs);
+	printf("Hidden Items:     %d\n", hidden);
+  	printf("------------------------------\n");
+   	printf("Total:            %d items found.\n", files + dirs);
+
+     } else {
+        perror("Failed to read directory");
+     }
+     return SUCCESS;
+   }
+
 
   if (command->next != NULL) {
      int fd[2];
